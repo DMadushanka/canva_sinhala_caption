@@ -11,7 +11,10 @@ export function setBackendUrl(url: string): void {
 export async function checkBackendHealth(): Promise<{ ok: boolean; message: string }> {
   const url = getBackendUrl();
   try {
-    const res = await fetch(`${url}/`, { method: "GET" });
+    const res = await fetch(`${url}/`, {
+      method: "GET",
+      headers: { "Bypass-Tunnel-Reminder": "true" },
+    });
     if (res.ok) {
       const data = await res.json();
       return { ok: true, message: `Connected (${data.service || "Online"})` };
@@ -36,6 +39,7 @@ export async function transcribeMedia(
   try {
     const res = await fetch(`${backendUrl}/api/transcribe`, {
       method: "POST",
+      headers: { "Bypass-Tunnel-Reminder": "true" },
       body: formData,
     });
 
