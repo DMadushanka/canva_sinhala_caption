@@ -59,9 +59,14 @@ export async function transcribeMedia(
   formData.append("words_per_chunk", wordsPerChunk.toString());
 
   try {
+    const headers: Record<string, string> = {};
+    if (backendUrl.includes("loca.lt")) {
+      headers["Bypass-Tunnel-Reminder"] = "true";
+    }
+
     const res = await fetch(`${backendUrl}/api/transcribe`, {
       method: "POST",
-      headers: { "Bypass-Tunnel-Reminder": "true" },
+      headers,
       body: formData,
     });
 
@@ -74,7 +79,7 @@ export async function transcribeMedia(
   } catch (err: any) {
     if (err.message && err.message.includes("Failed to fetch")) {
       throw new Error(
-        `Cloud Backend එකට සම්බන්ධ විය නොහැකි විය (${backendUrl}). කරුණාකර Python backend එක run කර ඇතිදැයි හෝ Settings හි Backend URL නිවැරදිදැයි පරීක්ෂා කරන්න.`
+        `Cloud Backend එකට සම්බන්ධ වීමට නොහැකි විය (${backendUrl}). කරුණාකර SinhalaCaptionsEngine app එක run කර ඇතිදැයි සහ Canva Connection URL එක නිවැරදිදැයි පරීක්ෂා කරන්න.`
       );
     }
     throw err;

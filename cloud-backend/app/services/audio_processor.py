@@ -14,7 +14,7 @@ class AudioProcessor:
         which provides the highest accuracy for Sinhala Speech-to-Text models.
         """
         if output_path is None:
-            tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+            tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
             output_path = tmp.name
             tmp.close()
 
@@ -31,9 +31,9 @@ class AudioProcessor:
             "-y",                   # Overwrite output
             "-i", input_path,       # Input file
             "-vn",                  # Disable video stream
-            "-acodec", "pcm_s16le", # PCM 16-bit little-endian
             "-ar", "16000",         # Sample rate 16kHz
             "-ac", "1",             # Mono audio
+            "-b:a", "64k",          # 64kbps MP3 (ultra lightweight & fast upload)
             output_path
         ]
 
