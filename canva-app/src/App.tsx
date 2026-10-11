@@ -393,14 +393,28 @@ export const App: React.FC = () => {
                       <span className="segment-time">
                         {seg.start}s - {seg.end}s
                       </span>
-                      <button
-                        className="btn-secondary"
-                        style={{ padding: "3px 8px", fontSize: 10 }}
-                        onClick={() => handleAddToCanva(seg)}
-                        title="Add this caption line directly to Canva canvas"
-                      >
-                        <PlusCircle size={11} /> To Canvas
-                      </button>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button
+                          className="btn-secondary"
+                          style={{ padding: "3px 8px", fontSize: 10 }}
+                          onClick={() => {
+                            navigator.clipboard.writeText(seg.text);
+                            setSuccessMsg(`"${seg.text.slice(0, 15)}..." Copy කරගන්නා ලදී!`);
+                            setTimeout(() => setSuccessMsg(null), 2000);
+                          }}
+                          title="Copy this line to paste into Canva Captions"
+                        >
+                          <Copy size={11} /> Copy
+                        </button>
+                        <button
+                          className="btn-secondary"
+                          style={{ padding: "3px 8px", fontSize: 10 }}
+                          onClick={() => handleAddToCanva(seg)}
+                          title="Add this caption line directly to Canva canvas"
+                        >
+                          <PlusCircle size={11} /> To Canvas
+                        </button>
+                      </div>
                     </div>
                     <textarea
                       className="segment-input"
@@ -432,11 +446,11 @@ export const App: React.FC = () => {
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, color: "#00c4cc", fontSize: 13 }}>
                   <Download size={16} />
-                  <span>1. Download Subtitle File (.VTT)</span>
+                  <span>Download Subtitle File (.VTT / .SRT)</span>
                 </div>
                 
                 <p style={{ margin: 0, fontSize: 11, color: "#d1d5db", lineHeight: 1.4 }}>
-                  Canva Video එකට නියමිත වේලාවට (Timely sync) Subtitles ලබා දීමට මෙම .VTT ගොනුව බාගත කරගන්න.
+                  CapCut, Premiere, හෝ YouTube වෙත සෘජුවම Auto-Sync උපසිරැසි එක් කිරීමට මෙම ගොනු බාගත කරගන්න.
                 </p>
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -454,22 +468,22 @@ export const App: React.FC = () => {
                     className="btn-secondary"
                     onClick={handleExportSRT}
                     disabled={isExporting}
-                    title="Download .SRT file for Premiere/CapCut/VLC"
+                    title="Download .SRT file for CapCut/Premiere/VLC"
                   >
                     <Download size={14} /> .SRT
                   </button>
                 </div>
 
-                {/* Direct browser link fallback if iframe restricts downloads */}
+                {/* Direct browser link fallback */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, color: "#9ca3af" }}>
-                  <span>Browser Direct Link:</span>
+                  <span>Direct Download:</span>
                   <a
                     href={`${getBackendUrl()}/api/download/vtt`}
                     target="_blank"
                     rel="noreferrer"
                     style={{ color: "#00c4cc", textDecoration: "underline", fontWeight: 600 }}
                   >
-                    Click here if download doesn't start automatically
+                    Click to download .VTT directly
                   </a>
                 </div>
               </div>
@@ -477,7 +491,7 @@ export const App: React.FC = () => {
               {/* TIMELY ASSIGNMENT GUIDE CARD */}
               <div
                 style={{
-                  background: "rgba(17, 24, 39, 0.8)",
+                  background: "rgba(17, 24, 39, 0.85)",
                   border: "1px solid rgba(251, 191, 36, 0.35)",
                   borderRadius: 10,
                   padding: "14px",
@@ -488,31 +502,24 @@ export const App: React.FC = () => {
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, color: "#fbbf24", marginBottom: 8, fontSize: 12 }}>
                   <Video size={15} />
-                  <span>2. How to Timely Sync to Canva Video (වීඩියෝවට එක් කරන අයුරු)</span>
+                  <span>Canva එකේ Timely Captions සකසන නිවැරදි ක්‍රම 2:</span>
                 </div>
 
-                <div style={{ background: "rgba(239, 68, 68, 0.1)", borderLeft: "3px solid #ef4444", padding: "6px 10px", marginBottom: 10, borderRadius: 4, color: "#fca5a5", fontSize: 11 }}>
-                  ⚠️ <strong>කරුණාකර Subtitle Code එක Canvas එක මත Paste නොකරන්න!</strong><br />
-                  (Paste කළ විට එය සාමාන්‍ය අකුරු පෙළක් ලෙස වීඩියෝව උඩ එක තැන පෙනේ. පහත ක්‍රමයට Upload කරන්න)
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <div>
-                    <strong style={{ color: "#00c4cc" }}>පියවර 1:</strong> ඉහත <strong>Download sinhala_captions.vtt</strong> ඔබා ගොනුව PC එකට Save කරගන්න.
-                  </div>
-                  <div>
-                    <strong style={{ color: "#00c4cc" }}>පියවර 2:</strong> Canva Design එකේ ඇති <strong>ඔබගේ Video එක Click කර Select කරන්න</strong>.
-                  </div>
-                  <div>
-                    <strong style={{ color: "#00c4cc" }}>පියවර 3:</strong> Canva හි උඩ Toolbar එකෙහි ඇති <strong>"Captions"</strong> (හෝ <strong>...</strong> තිත් තුන ඔබා "Captions") ක්ලික් කරන්න.
-                  </div>
-                  <div>
-                    <strong style={{ color: "#00c4cc" }}>පියවර 4:</strong> <strong>"Upload subtitle file"</strong> ඔබා ඔබ බාගත කළ <code>sinhala_captions.vtt</code> ගොනුව තෝරන්න.
+                <div style={{ marginBottom: 10 }}>
+                  <strong style={{ color: "#00c4cc" }}>ක්‍රමය 1: Canva Captions Auto-Timing Trick (හොඳම ක්‍රමය)</strong>
+                  <div style={{ paddingLeft: 8, marginTop: 4 }}>
+                    1. Canva හි වම්පස පෙනෙන Captions panel එකෙන් Style එකක් (Classic / Momentum) තෝරා <strong>"Generate captions"</strong> ඔබන්න.<br />
+                    2. එවිට Canva විසින් Video Timeline එකේ නියමිත වෙලාවට Subtitle boxes සාදයි.<br />
+                    3. දැන් Canva Captions list එකේ ඇති text වෙනුවට, අපගේ App එකේ එක් එක් segment හි ඇති <strong>Copy</strong> ඔබා නිවැරදි සිංහල අකුරු Paste කරන්න!
                   </div>
                 </div>
 
-                <div style={{ marginTop: 10, padding: "8px 10px", background: "rgba(52, 211, 153, 0.1)", border: "1px solid rgba(52, 211, 153, 0.3)", borderRadius: 6, color: "#34d399", fontWeight: 600, fontSize: 11 }}>
-                  ✨ සාර්ථකයි! දැන් Video එක Play වන විට නියමිත තත්පරයේදී (Timely sync) සිංහල උපසිරැසි ස්වයංක්‍රීයව දිස්වේ.
+                <div style={{ borderTop: "1px solid rgba(255, 255, 255, 0.1)", paddingTop: 8 }}>
+                  <strong style={{ color: "#34d399" }}>ක්‍රමය 2: Canvas Text + Timeline Trimming</strong>
+                  <div style={{ paddingLeft: 8, marginTop: 4 }}>
+                    1. ඕනෑම Segment එකක <strong>To Canvas</strong> ඔබන්න.<br />
+                    2. Canva හි පහළ Timeline එකේ එම Text bar එකේ කොන් අල්ලා ඇද අදාළ තත්පර ගණනට (උදා: 18s - 23s) Trim කරන්න.
+                  </div>
                 </div>
               </div>
 
