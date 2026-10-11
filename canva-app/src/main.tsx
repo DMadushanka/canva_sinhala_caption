@@ -11,18 +11,36 @@ if (typeof document !== "undefined") {
   document.head.appendChild(styleEl);
 }
 
-// Safely mount to existing #root or create it for Canva iframe
-let rootEl = document.getElementById("root");
-if (!rootEl && typeof document !== "undefined") {
-  rootEl = document.createElement("div");
-  rootEl.id = "root";
-  document.body.appendChild(rootEl);
+function renderApp() {
+  let rootEl = document.getElementById("root");
+  if (!rootEl && typeof document !== "undefined") {
+    rootEl = document.createElement("div");
+    rootEl.id = "root";
+    document.body.appendChild(rootEl);
+  }
+
+  if (rootEl) {
+    ReactDOM.createRoot(rootEl).render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>
+    );
+  }
 }
 
-if (rootEl) {
-  ReactDOM.createRoot(rootEl).render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>
-  );
+// Register Canva Design Editor intent if inside Canva, or render directly
+async function bootstrap() {
+  try {
+    const { prepareDesignEditor } = await import("@canva/intents/design");
+    prepareDesignEditor({
+      render: async () => {
+        renderApp();
+      },
+    });
+  } catch (e) {
+    console.log("Running app standalone:", e);
+    renderApp();
+  }
 }
+
+bootstrap();
