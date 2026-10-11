@@ -14,7 +14,16 @@ import {
   Video
 } from "lucide-react";
 import { SubtitleSegment, CaptionStyle } from "./types";
-import { transcribeMedia, downloadFile, getBackendUrl, setBackendUrl, checkBackendHealth, buildVttContent, buildSrtContent } from "./services/api";
+import {
+  transcribeMedia,
+  downloadFile,
+  downloadViaBackend,
+  getBackendUrl,
+  setBackendUrl,
+  checkBackendHealth,
+  buildVttContent,
+  buildSrtContent,
+} from "./services/api";
 import { addCaptionToCanva, addAllCaptionsToCanva } from "./services/canvaSdk";
 
 export const App: React.FC = () => {
@@ -23,6 +32,7 @@ export const App: React.FC = () => {
   const [engine, setEngine] = useState<"google" | "gemini">("gemini");
   const [wordsPerChunk, setWordsPerChunk] = useState<number>(5);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
   const [showCodeModal, setShowCodeModal] = useState<"vtt" | "srt" | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -149,23 +159,39 @@ export const App: React.FC = () => {
   };
 
   // Export SRT
-  const handleExportSRT = () => {
+  const handleExportSRT = async () => {
     if (segments.length === 0) return;
-    const content = srtData || buildSrtContent(segments);
-    downloadFile(content, "sinhala_captions.srt", "text/plain");
-    navigator.clipboard.writeText(content).catch(() => {});
-    setSuccessMsg("sinhala_captions.srt බාගත කරන ලදී (Clipboard එකටද Copy විය)!");
-    setTimeout(() => setSuccessMsg(null), 4000);
+    setIsExporting(true);
+    try {
+      const content = srtData || buildSrtContent(segments);
+      await downloadViaBackend("srt", content, segments);
+      downloadFile(content, "sinhala_captions.srt", "text/plain");
+      navigator.clipboard.writeText(content).catch(() => {});
+      setSuccessMsg("sinhala_captions.srt බාගත කිරීම ආරම්භ විය (Downloaded)! Canva හි Upload කරන්න.");
+      setTimeout(() => setSuccessMsg(null), 5000);
+    } catch (e: any) {
+      setErrorMsg("Download error: " + e.message);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
-  // Export VTT
-  const handleExportVTT = () => {
+  // Export VTT (Primary format for Canva Video Captions)
+  const handleExportVTT = async () => {
     if (segments.length === 0) return;
-    const content = vttData || buildVttContent(segments);
-    downloadFile(content, "sinhala_captions.vtt", "text/vtt");
-    navigator.clipboard.writeText(content).catch(() => {});
-    setSuccessMsg("sinhala_captions.vtt බාගත කරන ලදී (Clipboard එකටද Copy විය)!");
-    setTimeout(() => setSuccessMsg(null), 4000);
+    setIsExporting(true);
+    try {
+      const content = vttData || buildVttContent(segments);
+      await downloadViaBackend("vtt", content, segments);
+      downloadFile(content, "sinhala_captions.vtt", "text/vtt");
+      navigator.clipboard.writeText(content).catch(() => {});
+      setSuccessMsg("✅ sinhala_captions.vtt ගොනුව බාගත විය! පහත උපදෙස් අනුව Canva වීඩියෝවට Upload කරන්න.");
+      setTimeout(() => setSuccessMsg(null), 6000);
+    } catch (e: any) {
+      setErrorMsg("Download error: " + e.message);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -390,58 +416,127 @@ export const App: React.FC = () => {
 
           {/* Direct Design Integration Actions */}
           {segments.length > 0 && (
-            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-              {/* Add All Directly to Canva Design */}
-              <button
-                className="btn-primary"
-                onClick={handleApplyAllToCanva}
-                disabled={isAddingAll}
+            <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+              
+              {/* PRIMARY ACTION: Download .VTT for Timely Video Synchronization */}
+              <div
+                style={{
+                  background: "linear-gradient(135deg, rgba(0, 196, 204, 0.12) 0%, rgba(125, 42, 232, 0.15) 100%)",
+                  border: "1px solid rgba(0, 196, 204, 0.4)",
+                  borderRadius: 10,
+                  padding: "14px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
               >
-                {isAddingAll ? (
-                  <>
-                    <div className="spinner" />
-                    <span>Adding to Canva...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles size={16} />
-                    <span>Add All to Canva Design (Design එකට දාන්න)</span>
-                  </>
-                )}
-              </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 700, color: "#00c4cc", fontSize: 13 }}>
+                  <Download size={16} />
+                  <span>1. Download Subtitle File (.VTT)</span>
+                </div>
+                
+                <p style={{ margin: 0, fontSize: 11, color: "#d1d5db", lineHeight: 1.4 }}>
+                  Canva Video එකට නියමිත වේලාවට (Timely sync) Subtitles ලබා දීමට මෙම .VTT ගොනුව බාගත කරගන්න.
+                </p>
 
-              {/* Utility Row */}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    className="btn-primary"
+                    style={{ flex: 1, minWidth: 160 }}
+                    onClick={handleExportVTT}
+                    disabled={isExporting}
+                  >
+                    <Download size={15} />
+                    <span>Download sinhala_captions.vtt</span>
+                  </button>
+
+                  <button
+                    className="btn-secondary"
+                    onClick={handleExportSRT}
+                    disabled={isExporting}
+                    title="Download .SRT file for Premiere/CapCut/VLC"
+                  >
+                    <Download size={14} /> .SRT
+                  </button>
+                </div>
+
+                {/* Direct browser link fallback if iframe restricts downloads */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 10, color: "#9ca3af" }}>
+                  <span>Browser Direct Link:</span>
+                  <a
+                    href={`${getBackendUrl()}/api/download/vtt`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ color: "#00c4cc", textDecoration: "underline", fontWeight: 600 }}
+                  >
+                    Click here if download doesn't start automatically
+                  </a>
+                </div>
+              </div>
+
+              {/* TIMELY ASSIGNMENT GUIDE CARD */}
+              <div
+                style={{
+                  background: "rgba(17, 24, 39, 0.8)",
+                  border: "1px solid rgba(251, 191, 36, 0.35)",
+                  borderRadius: 10,
+                  padding: "14px",
+                  fontSize: 11,
+                  lineHeight: 1.55,
+                  color: "#e5e7eb",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, color: "#fbbf24", marginBottom: 8, fontSize: 12 }}>
+                  <Video size={15} />
+                  <span>2. How to Timely Sync to Canva Video (වීඩියෝවට එක් කරන අයුරු)</span>
+                </div>
+
+                <div style={{ background: "rgba(239, 68, 68, 0.1)", borderLeft: "3px solid #ef4444", padding: "6px 10px", marginBottom: 10, borderRadius: 4, color: "#fca5a5", fontSize: 11 }}>
+                  ⚠️ <strong>කරුණාකර Subtitle Code එක Canvas එක මත Paste නොකරන්න!</strong><br />
+                  (Paste කළ විට එය සාමාන්‍ය අකුරු පෙළක් ලෙස වීඩියෝව උඩ එක තැන පෙනේ. පහත ක්‍රමයට Upload කරන්න)
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div>
+                    <strong style={{ color: "#00c4cc" }}>පියවර 1:</strong> ඉහත <strong>Download sinhala_captions.vtt</strong> ඔබා ගොනුව PC එකට Save කරගන්න.
+                  </div>
+                  <div>
+                    <strong style={{ color: "#00c4cc" }}>පියවර 2:</strong> Canva Design එකේ ඇති <strong>ඔබගේ Video එක Click කර Select කරන්න</strong>.
+                  </div>
+                  <div>
+                    <strong style={{ color: "#00c4cc" }}>පියවර 3:</strong> Canva හි උඩ Toolbar එකෙහි ඇති <strong>"Captions"</strong> (හෝ <strong>...</strong> තිත් තුන ඔබා "Captions") ක්ලික් කරන්න.
+                  </div>
+                  <div>
+                    <strong style={{ color: "#00c4cc" }}>පියවර 4:</strong> <strong>"Upload subtitle file"</strong> ඔබා ඔබ බාගත කළ <code>sinhala_captions.vtt</code> ගොනුව තෝරන්න.
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 10, padding: "8px 10px", background: "rgba(52, 211, 153, 0.1)", border: "1px solid rgba(52, 211, 153, 0.3)", borderRadius: 6, color: "#34d399", fontWeight: 600, fontSize: 11 }}>
+                  ✨ සාර්ථකයි! දැන් Video එක Play වන විට නියමිත තත්පරයේදී (Timely sync) සිංහල උපසිරැසි ස්වයංක්‍රීයව දිස්වේ.
+                </div>
+              </div>
+
+              {/* SECONDARY UTILITIES */}
               <div style={{ display: "flex", gap: 8 }}>
                 <button
                   className="btn-secondary"
+                  style={{ flex: 1 }}
                   onClick={handleCopyAllText}
-                  title="Copy complete Sinhala transcript to clipboard"
+                  title="Copy pure Sinhala transcript without timestamps"
                 >
-                  <Copy size={13} /> Copy All Text
+                  <Copy size={13} /> Copy Plain Text
                 </button>
                 <button
                   className="btn-secondary"
-                  onClick={() => {
-                    handleExportVTT();
-                    setShowCodeModal(showCodeModal === "vtt" ? null : "vtt");
-                  }}
-                  title="Download or view .VTT subtitle file"
+                  style={{ flex: 1 }}
+                  onClick={() => setShowCodeModal(showCodeModal === "vtt" ? null : "vtt")}
+                  title="View raw WebVTT code"
                 >
-                  <Download size={13} /> Export .VTT
-                </button>
-                <button
-                  className="btn-secondary"
-                  onClick={() => {
-                    handleExportSRT();
-                    setShowCodeModal(showCodeModal === "srt" ? null : "srt");
-                  }}
-                  title="Download or view .SRT subtitle file"
-                >
-                  <Download size={13} /> Export .SRT
+                  <Subtitles size={13} /> {showCodeModal ? "Hide Code" : "View VTT Code"}
                 </button>
               </div>
 
-              {/* In-App Subtitle Viewer (Guaranteed to work if browser blocks iframe download) */}
+              {/* In-App Subtitle Viewer (Optional Inspection) */}
               {showCodeModal && (
                 <div
                   style={{
@@ -453,19 +548,19 @@ export const App: React.FC = () => {
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: "#00c4cc" }}>
-                      {showCodeModal.toUpperCase()} Subtitle File Content:
+                      Raw WebVTT Code:
                     </span>
                     <button
                       className="btn-secondary"
                       style={{ padding: "3px 8px", fontSize: 10 }}
                       onClick={() => {
-                        const code = showCodeModal === "vtt" ? buildVttContent(segments) : buildSrtContent(segments);
+                        const code = buildVttContent(segments);
                         navigator.clipboard.writeText(code);
-                        setSuccessMsg(`${showCodeModal.toUpperCase()} Code Copied!`);
+                        setSuccessMsg("VTT Code Copied!");
                         setTimeout(() => setSuccessMsg(null), 3000);
                       }}
                     >
-                      <Copy size={11} /> Copy {showCodeModal.toUpperCase()}
+                      <Copy size={11} /> Copy Code
                     </button>
                   </div>
                   <textarea
@@ -482,37 +577,10 @@ export const App: React.FC = () => {
                       fontFamily: "monospace",
                       resize: "vertical",
                     }}
-                    value={showCodeModal === "vtt" ? buildVttContent(segments) : buildSrtContent(segments)}
+                    value={buildVttContent(segments)}
                   />
                 </div>
               )}
-
-              {/* Native Canva Video Caption Guide Box */}
-              <div
-                style={{
-                  background: "rgba(125, 42, 232, 0.08)",
-                  border: "1px solid rgba(125, 42, 232, 0.25)",
-                  borderRadius: 10,
-                  padding: "12px 14px",
-                  fontSize: 11,
-                  lineHeight: 1.5,
-                  color: "#d1d5db",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, color: "#fff", marginBottom: 6 }}>
-                  <Video size={14} color="#00c4cc" />
-                  <span>Canva Video Timeline Subtitle Track (වීඩියෝවට සෘජුව උපසිරැසි දමන්න)</span>
-                </div>
-                <div>
-                  1. Click <strong>Export .VTT</strong> (it downloads the file & copies the text).<br />
-                  2. Select your video on the Canva canvas.<br />
-                  3. In the top toolbar, click <strong>Captions</strong> (උපසිරැසි).<br />
-                  4. Click <strong>Upload subtitle file</strong> and choose the <strong>sinhala_captions.vtt</strong> file.<br />
-                  <span style={{ color: "#00c4cc", fontWeight: 600 }}>
-                    ⚡ Canva will automatically display and synchronize Sinhala subtitles across your entire video!
-                  </span>
-                </div>
-              </div>
             </div>
           )}
         </div>

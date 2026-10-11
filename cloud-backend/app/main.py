@@ -79,6 +79,11 @@ def health_check():
         "gemini_configured": bool(settings.GEMINI_API_KEY)
     }
 
+latest_captions = {
+    "vtt": "",
+    "srt": ""
+}
+
 @app.post("/api/transcribe")
 async def transcribe_media(
     file: UploadFile = File(...),
@@ -117,10 +122,12 @@ async def transcribe_media(
             segments = stt_result["segments"]
         else:
             segments = []
-
         # 4. Generate SRT and VTT representations
         srt_content = CaptionFormatter.to_srt(segments)
         vtt_content = CaptionFormatter.to_vtt(segments)
+
+        latest_captions["srt"] = srt_content
+        latest_captions["vtt"] = vtt_content
 
         return {
             "success": True,
@@ -137,6 +144,60 @@ async def transcribe_media(
     finally:
         AudioProcessor.cleanup_file(temp_in)
         AudioProcessor.cleanup_file(temp_wav)
+
+class PrepareDownloadRequest(BaseModel):
+    vtt: Optional[str] = None
+    srt: Optional[str] = None
+    segments: Optional[List[SubtitleSegment]] = None
+
+@app.post("/api/prepare-download")
+def prepare_download(payload: PrepareDownloadRequest):
+    """Saves the current subtitles into memory so direct browser GET download can fetch it."""
+    if payload.segments:
+        payload_segments = [seg.dict() for seg in payload.segments]
+        latest_captions["vtt"] = CaptionFormatter.to_vtt(payload_segments)
+        latest_captions["srt"] = CaptionFormatter.to_srt(payload_segments)
+    if payload.vtt:
+        latest_captions["vtt"] = payload.vtt
+    if payload.srt:
+        latest_captions["srt"] = payload.srt
+    return {
+        "ok": True,
+        "vtt_url": "/api/download/vtt",
+        "srt_url": "/api/download/srt"
+    }
+
+@app.get("/api/download/vtt")
+def download_vtt():
+    """Direct browser GET download for sinhala_captions.vtt file."""
+    vtt_text = latest_captions.get("vtt", "")
+    if not vtt_text:
+        vtt_text = "WEBVTT\n\n1\n00:00:00.000 --> 00:00:05.000\n(No subtitles generated yet)\n"
+    return Response(
+        content=vtt_text.encode("utf-8"),
+        media_type="text/vtt",
+        headers={
+            "Content-Disposition": 'attachment; filename="sinhala_captions.vtt"',
+            "Content-Type": "text/vtt; charset=utf-8",
+            "Cache-Control": "no-cache",
+        }
+    )
+
+@app.get("/api/download/srt")
+def download_srt():
+    """Direct browser GET download for sinhala_captions.srt file."""
+    srt_text = latest_captions.get("srt", "")
+    if not srt_text:
+        srt_text = "1\n00:00:00,000 --> 00:00:05,000\n(No subtitles generated yet)\n"
+    return Response(
+        content=srt_text.encode("utf-8"),
+        media_type="application/x-subrip",
+        headers={
+            "Content-Disposition": 'attachment; filename="sinhala_captions.srt"',
+            "Content-Type": "text/plain; charset=utf-8",
+            "Cache-Control": "no-cache",
+        }
+    )
 
 @app.post("/api/export-srt")
 def export_srt(payload: ExportRequest):
@@ -161,3 +222,4 @@ def export_vtt(payload: ExportRequest):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main:app", host=settings.HOST, port=settings.PORT, reload=True)
+

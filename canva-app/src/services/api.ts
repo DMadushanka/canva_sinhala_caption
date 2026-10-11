@@ -88,6 +88,85 @@ export function buildSrtContent(segments: any[]): string {
   return srt;
 }
 
+export async function prepareDownload(
+  segments?: any[],
+  vtt?: string,
+  srt?: string
+): Promise<{ ok: boolean; vtt_url: string; srt_url: string }> {
+  const backendUrl = getBackendUrl();
+  try {
+    const res = await fetch(`${backendUrl}/api/prepare-download`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Bypass-Tunnel-Reminder": "true",
+      },
+      body: JSON.stringify({ segments, vtt, srt }),
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn("Backend prepare download error:", e);
+  }
+  return { ok: false, vtt_url: "/api/download/vtt", srt_url: "/api/download/srt" };
+}
+
+export async function downloadViaBackend(
+  type: "vtt" | "srt",
+  content: string,
+  segments?: any[]
+): Promise<string> {
+  const backendUrl = getBackendUrl();
+  const filename = type === "vtt" ? "sinhala_captions.vtt" : "sinhala_captions.srt";
+  const downloadUrl = `${backendUrl}/api/download/${type}`;
+
+  // 1. Sync latest text content to backend
+  try {
+    await fetch(`${backendUrl}/api/prepare-download`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Bypass-Tunnel-Reminder": "true",
+      },
+      body: JSON.stringify(
+        type === "vtt"
+          ? { vtt: content, segments }
+          : { srt: content, segments }
+      ),
+    });
+  } catch (err) {
+    console.warn("Could not sync download to backend:", err);
+  }
+
+  // 2. Trigger browser download via anchor tag with HTTP backend URL
+  try {
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = filename;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      try {
+        document.body.removeChild(a);
+      } catch (e) {}
+    }, 400);
+  } catch (e) {
+    console.warn("Anchor click failed:", e);
+  }
+
+  // 3. Fallback: window.open to backend attachment endpoint
+  try {
+    window.open(downloadUrl, "_blank");
+  } catch (e) {
+    console.warn("window.open failed:", e);
+  }
+
+  return downloadUrl;
+}
+
 export function downloadFile(content: string, filename: string, mimeType: string): boolean {
   try {
     const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
@@ -108,13 +187,7 @@ export function downloadFile(content: string, filename: string, mimeType: string
     return true;
   } catch (err) {
     console.warn("Direct blob download restricted in iframe:", err);
-    try {
-      const encoded = encodeURIComponent(content);
-      const dataUri = `data:${mimeType};charset=utf-8,${encoded}`;
-      window.open(dataUri, "_blank");
-      return true;
-    } catch (e2) {
-      return false;
-    }
+    return false;
   }
 }
+
