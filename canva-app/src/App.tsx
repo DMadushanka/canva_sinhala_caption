@@ -232,9 +232,36 @@ export const App: React.FC = () => {
 
       {/* Notifications */}
       {errorMsg && (
-        <div style={{ background: "rgba(255, 73, 128, 0.15)", border: "1px solid rgba(255, 73, 128, 0.4)", borderRadius: 8, padding: 10, marginBottom: 12, display: "flex", gap: 8, alignItems: "center", color: "#ff4980", fontSize: 12 }}>
-          <AlertCircle size={16} />
-          <span>{errorMsg}</span>
+        <div style={{ background: "rgba(255, 73, 128, 0.15)", border: "1px solid rgba(255, 73, 128, 0.4)", borderRadius: 8, padding: 12, marginBottom: 12, color: "#ff4980", fontSize: 12 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 8 }}>
+            <AlertCircle size={16} style={{ marginTop: 2, flexShrink: 0 }} />
+            <span>{errorMsg}</span>
+          </div>
+          {errorMsg.includes("Backend") && (
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <input
+                type="text"
+                className="input-control"
+                style={{ fontSize: 11, padding: "4px 8px", height: 32, flex: 1 }}
+                value={customBackendUrl}
+                placeholder="https://your-tunnel.loca.lt"
+                onChange={(e) => {
+                  setCustomBackendUrl(e.target.value);
+                  setBackendUrl(e.target.value);
+                }}
+              />
+              <button
+                className="btn-secondary"
+                style={{ fontSize: 11, padding: "4px 10px", height: 32, whiteSpace: "nowrap" }}
+                onClick={() => {
+                  setErrorMsg(null);
+                  handleGenerateCaptions();
+                }}
+              >
+                Save & Retry
+              </button>
+            </div>
+          )}
         </div>
       )}
 
