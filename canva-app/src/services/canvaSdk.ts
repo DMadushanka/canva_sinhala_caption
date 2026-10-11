@@ -5,7 +5,7 @@ import { SubtitleSegment, CaptionStyle } from "../types";
  * Supports both Canva runtime (inside Canva iframe) and standalone browser development.
  */
 export async function addCaptionToCanva(segment: SubtitleSegment, style: CaptionStyle): Promise<boolean> {
-  try:
+  try {
     // Check if running inside Canva Apps SDK environment
     // @ts-ignore
     if (window.Canva && window.Canva.design) {

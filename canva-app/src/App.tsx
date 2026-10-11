@@ -9,9 +9,7 @@ import {
   Subtitles,
   Trash2,
   CheckCircle2,
-  AlertCircle,
-  Play,
-  RotateCcw
+  AlertCircle
 } from "lucide-react";
 import { SubtitleSegment, CaptionStyle } from "./types";
 import { transcribeMedia, downloadFile } from "./services/api";
