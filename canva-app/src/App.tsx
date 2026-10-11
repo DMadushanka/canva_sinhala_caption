@@ -9,11 +9,13 @@ import {
   Subtitles,
   Trash2,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Copy,
+  Video
 } from "lucide-react";
 import { SubtitleSegment, CaptionStyle } from "./types";
 import { transcribeMedia, downloadFile, getBackendUrl, setBackendUrl, checkBackendHealth } from "./services/api";
-import { addCaptionToCanva } from "./services/canvaSdk";
+import { addCaptionToCanva, addAllCaptionsToCanva } from "./services/canvaSdk";
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"upload" | "editor" | "styling">("upload");
@@ -118,6 +120,31 @@ export const App: React.FC = () => {
       setSuccessMsg(`"${seg.text.slice(0, 20)}..." Canva පිටුවට එක් කරන ලදී!`);
       setTimeout(() => setSuccessMsg(null), 3000);
     }
+  };
+
+  // Add all captions to Canva design
+  const [isAddingAll, setIsAddingAll] = useState<boolean>(false);
+  const handleApplyAllToCanva = async () => {
+    if (segments.length === 0) return;
+    setIsAddingAll(true);
+    try {
+      const addedCount = await addAllCaptionsToCanva(segments, style);
+      setSuccessMsg(`සාර්ථකයි! උපසිරැසි ${addedCount} ක් Canva Design එකට එක් කරන ලදී.`);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (e: any) {
+      setErrorMsg("Canva Design එකට එක් කිරීමට නොහැකි විය: " + e.message);
+    } finally {
+      setIsAddingAll(false);
+    }
+  };
+
+  // Copy all Sinhala text
+  const handleCopyAllText = () => {
+    if (segments.length === 0) return;
+    const fullText = segments.map((s) => s.text).join("\n");
+    navigator.clipboard.writeText(fullText);
+    setSuccessMsg("සියලු සිංහල උපසිරැසි Copy කරගන්නා ලදී (Copied to clipboard)!");
+    setTimeout(() => setSuccessMsg(null), 3000);
   };
 
   // Export SRT
@@ -367,15 +394,71 @@ export const App: React.FC = () => {
             )}
           </div>
 
-          {/* Export Actions */}
+          {/* Direct Design Integration Actions */}
           {segments.length > 0 && (
-            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-              <button className="btn-secondary" onClick={handleExportSRT}>
-                <Download size={13} /> Export .SRT
+            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* Add All Directly to Canva Design */}
+              <button
+                className="btn-primary"
+                onClick={handleApplyAllToCanva}
+                disabled={isAddingAll}
+              >
+                {isAddingAll ? (
+                  <>
+                    <div className="spinner" />
+                    <span>Adding to Canva...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={16} />
+                    <span>Add All to Canva Design (Design එකට දාන්න)</span>
+                  </>
+                )}
               </button>
-              <button className="btn-secondary" onClick={handleExportVTT}>
-                <Download size={13} /> Export .VTT
-              </button>
+
+              {/* Utility Row */}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  className="btn-secondary"
+                  onClick={handleCopyAllText}
+                  title="Copy complete Sinhala transcript to clipboard"
+                >
+                  <Copy size={13} /> Copy All Text
+                </button>
+                <button className="btn-secondary" onClick={handleExportSRT}>
+                  <Download size={13} /> Export .SRT
+                </button>
+                <button className="btn-secondary" onClick={handleExportVTT}>
+                  <Download size={13} /> Export .VTT
+                </button>
+              </div>
+
+              {/* Native Canva Video Caption Guide Box */}
+              <div
+                style={{
+                  background: "rgba(125, 42, 232, 0.08)",
+                  border: "1px solid rgba(125, 42, 232, 0.25)",
+                  borderRadius: 10,
+                  padding: "12px 14px",
+                  fontSize: 11,
+                  lineHeight: 1.5,
+                  color: "#d1d5db",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700, color: "#fff", marginBottom: 6 }}>
+                  <Video size={14} color="#00c4cc" />
+                  <span>Canva Video Timeline Subtitle Track (වීඩියෝවට සෘජුව උපසිරැසි දමන්න)</span>
+                </div>
+                <div>
+                  1. Click <strong>Export .VTT</strong> to download the subtitle file.<br />
+                  2. Select your video on the Canva canvas.<br />
+                  3. In the top toolbar, click <strong>Captions</strong> (උපසිරැසි).<br />
+                  4. Click <strong>Upload subtitle file</strong> and choose the downloaded <strong>.vtt</strong> file.<br />
+                  <span style={{ color: "#00c4cc", fontWeight: 600 }}>
+                    ⚡ Canva will automatically display and synchronize Sinhala subtitles across your entire video!
+                  </span>
+                </div>
+              </div>
             </div>
           )}
         </div>

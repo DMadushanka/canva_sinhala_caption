@@ -6,24 +6,36 @@ import { SubtitleSegment, CaptionStyle } from "../types";
  */
 export async function addCaptionToCanva(segment: SubtitleSegment, style: CaptionStyle): Promise<boolean> {
   try {
-    // Check if running inside Canva Apps SDK environment
-    // @ts-ignore
-    if (window.Canva && window.Canva.design) {
-      // @ts-ignore
-      await window.Canva.design.addNativeElement({
-        type: "TEXT",
-        children: [segment.text],
-        fontFamily: style.fontFamily,
-        fontSize: style.fontSize,
-        color: style.textColor,
-      });
-      return true;
-    } else {
-      console.log("[Canva SDK Sim] Injected Sinhala text into canvas:", segment.text, style);
-      return true;
-    }
+    const { addNativeElement } = await import("@canva/design");
+    await addNativeElement({
+      type: "text" as const,
+      children: [segment.text],
+    } as any);
+    return true;
   } catch (err) {
-    console.warn("Canva SDK integration notice:", err);
+    try {
+      // @ts-ignore
+      if (window.Canva && window.Canva.design) {
+        // @ts-ignore
+        await window.Canva.design.addNativeElement({
+          type: "text",
+          children: [segment.text],
+        });
+        return true;
+      }
+    } catch (fallbackErr) {
+      console.warn("Canva SDK fallback notice:", fallbackErr);
+    }
+    console.warn("Canva SDK notice:", err);
     return false;
   }
+}
+
+export async function addAllCaptionsToCanva(segments: SubtitleSegment[], style: CaptionStyle): Promise<number> {
+  let added = 0;
+  for (const seg of segments) {
+    const ok = await addCaptionToCanva(seg, style);
+    if (ok) added++;
+  }
+  return added;
 }
