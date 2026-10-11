@@ -27,7 +27,10 @@ yarn-debug.log*
 yarn-error.log*
 tmp/
 temp_audio/
+# Executables
+*.exe
 
 # OS files
 .DS_Store
 Thumbs.db
+
