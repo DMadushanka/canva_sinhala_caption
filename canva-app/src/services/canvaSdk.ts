@@ -6,21 +6,22 @@ import { SubtitleSegment, CaptionStyle } from "../types";
  */
 export async function addCaptionToCanva(segment: SubtitleSegment, style: CaptionStyle): Promise<boolean> {
   try {
-    const { addElementAtPoint, getDefaultPageDimensions } = await import("@canva/design");
+    const { addElementAtPoint, getDesignMetadata } = await import("@canva/design");
     
     let top = 800;
     let left = 100;
     let width = 800;
     
     try {
-      const dimensions = await getDefaultPageDimensions();
+      const metadata = await getDesignMetadata();
+      const dimensions = metadata?.defaultPageDimensions;
       if (dimensions && dimensions.width && dimensions.height) {
         width = Math.min(Math.round(dimensions.width * 0.8), 1200);
         left = Math.round((dimensions.width - width) / 2);
         top = Math.round(dimensions.height * 0.82); // Position near the bottom for video subtitle
       }
     } catch (dimErr) {
-      console.warn("Could not retrieve default page dimensions:", dimErr);
+      console.warn("Could not retrieve design metadata dimensions:", dimErr);
     }
 
     await addElementAtPoint({
