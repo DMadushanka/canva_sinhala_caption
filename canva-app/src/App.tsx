@@ -12,7 +12,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { SubtitleSegment, CaptionStyle } from "./types";
-import { transcribeMedia, downloadFile } from "./services/api";
+import { transcribeMedia, downloadFile, getBackendUrl, setBackendUrl, checkBackendHealth } from "./services/api";
 import { addCaptionToCanva } from "./services/canvaSdk";
 
 export const App: React.FC = () => {
@@ -23,6 +23,8 @@ export const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [customBackendUrl, setCustomBackendUrl] = useState<string>(getBackendUrl());
+  const [backendHealth, setBackendHealth] = useState<string | null>(null);
 
   // Subtitles state
   const [segments, setSegments] = useState<SubtitleSegment[]>([]);
@@ -478,6 +480,39 @@ export const App: React.FC = () => {
                 />
               </div>
             </div>
+          </div>
+
+          {/* Backend Connection Card */}
+          <div className="card-section">
+            <div className="section-label">Cloud Backend API URL</div>
+            <div className="form-group">
+              <input
+                type="text"
+                className="input-control"
+                value={customBackendUrl}
+                placeholder="e.g. http://localhost:8000 or https://your-cloud-run-url"
+                onChange={(e) => {
+                  setCustomBackendUrl(e.target.value);
+                  setBackendUrl(e.target.value);
+                }}
+              />
+            </div>
+            <button
+              className="btn-secondary"
+              style={{ width: "100%", justifyContent: "center" }}
+              onClick={async () => {
+                setBackendHealth("Testing connection...");
+                const res = await checkBackendHealth();
+                setBackendHealth(res.ok ? `✅ ${res.message}` : `❌ ${res.message}`);
+              }}
+            >
+              Test Backend Connection
+            </button>
+            {backendHealth && (
+              <div style={{ marginTop: 8, fontSize: 11, textAlign: "center", color: backendHealth.startsWith("✅") ? "#00c4cc" : "#ff4980" }}>
+                {backendHealth}
+              </div>
+            )}
           </div>
         </div>
       )}

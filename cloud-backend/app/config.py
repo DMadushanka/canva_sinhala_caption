@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "Canva Sinhala Caption API"
     VERSION: str = "1.0.0"
     HOST: str = "0.0.0.0"
-    PORT: int = 8080
+    PORT: int = 8000
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:5173,https://www.canva.com,https://canva.com"
     GOOGLE_APPLICATION_CREDENTIALS: str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
