@@ -21,6 +21,7 @@ import {
   getBackendUrl,
   setBackendUrl,
   checkBackendHealth,
+  updateGeminiApiKey,
   buildVttContent,
   buildSrtContent,
 } from "./services/api";
@@ -38,6 +39,7 @@ export const App: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [customBackendUrl, setCustomBackendUrl] = useState<string>(getBackendUrl());
   const [backendHealth, setBackendHealth] = useState<string | null>(null);
+  const [geminiKey, setGeminiKey] = useState<string>(localStorage.getItem("canva_sinhala_gemini_key") || "");
 
   // Subtitles state
   const [segments, setSegments] = useState<SubtitleSegment[]>([]);
@@ -191,6 +193,20 @@ export const App: React.FC = () => {
       setErrorMsg("Download error: " + e.message);
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleSaveGeminiKey = async () => {
+    if (!geminiKey.trim()) {
+      setErrorMsg("කරුණාකර Gemini API Key එකක් ඇතුළත් කරන්න.");
+      return;
+    }
+    const res = await updateGeminiApiKey(geminiKey.trim());
+    if (res.ok) {
+      setSuccessMsg(res.message);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } else {
+      setErrorMsg(res.message);
     }
   };
 
@@ -718,6 +734,41 @@ export const App: React.FC = () => {
                   onChange={(e) => setStyle({ ...style, backgroundColor: e.target.value })}
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Gemini API Key Card */}
+          <div className="card-section">
+            <div className="section-label">Google Gemini API Key</div>
+            <p style={{ margin: "0 0 8px 0", fontSize: 11, color: "#9ca3af" }}>
+              ඔබගේ Gemini API Key එක මෙහි ඇතුළත් කරන්න (aistudio.google.com වෙතින් නොමිලේ ලබාගත හැක).
+            </p>
+            <div className="form-group">
+              <input
+                type="password"
+                className="input-control"
+                value={geminiKey}
+                placeholder="AIzaSy..."
+                onChange={(e) => setGeminiKey(e.target.value)}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                className="btn-primary"
+                style={{ flex: 1 }}
+                onClick={handleSaveGeminiKey}
+              >
+                Save API Key
+              </button>
+              <a
+                href="https://aistudio.google.com/app/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="btn-secondary"
+                style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", padding: "0 10px", fontSize: 11 }}
+              >
+                Get Free Key ↗
+              </a>
             </div>
           </div>
 

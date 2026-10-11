@@ -25,6 +25,28 @@ export async function checkBackendHealth(): Promise<{ ok: boolean; message: stri
   }
 }
 
+export async function updateGeminiApiKey(key: string): Promise<{ ok: boolean; message: string }> {
+  const backendUrl = getBackendUrl();
+  try {
+    const res = await fetch(`${backendUrl}/api/set-api-key`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Bypass-Tunnel-Reminder": "true",
+      },
+      body: JSON.stringify({ gemini_api_key: key }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      localStorage.setItem("canva_sinhala_gemini_key", key);
+      return { ok: true, message: "Gemini API Key successfully saved!" };
+    }
+    return { ok: false, message: data.detail || "Failed to update API key" };
+  } catch (err: any) {
+    return { ok: false, message: "Cannot reach backend to save key" };
+  }
+}
+
 export async function transcribeMedia(
   file: File,
   engine: "google" | "gemini" = "google",

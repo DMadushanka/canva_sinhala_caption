@@ -79,6 +79,19 @@ def health_check():
         "gemini_configured": bool(settings.GEMINI_API_KEY)
     }
 
+class SetApiKeyRequest(BaseModel):
+    gemini_api_key: str
+
+@app.post("/api/set-api-key")
+def set_api_key(payload: SetApiKeyRequest):
+    key = payload.gemini_api_key.strip()
+    if not key:
+        raise HTTPException(status_code=400, detail="API Key cannot be empty")
+    settings.GEMINI_API_KEY = key
+    os.environ["GEMINI_API_KEY"] = key
+    stt_service.gemini_api_key = key
+    return {"ok": True, "message": "Gemini API key updated successfully"}
+
 latest_captions = {
     "vtt": "",
     "srt": ""
