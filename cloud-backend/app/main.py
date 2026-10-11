@@ -1,0 +1,141 @@
+import os
+import tempfile
+import logging
+from typing import List, Optional
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Response
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+from app.config import settings
+from app.services.audio_processor import AudioProcessor
+from app.services.sinhala_stt import SinhalaSpeechService
+from app.services.caption_formatter import CaptionFormatter
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.VERSION,
+    description="Cloud Speech-to-Text backend for Canva Sinhala Video Captions"
+)
+
+# CORS configuration to allow requests from Canva editor & localhost
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows Canva app preview and production domains
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+stt_service = SinhalaSpeechService()
+
+class WordItem(BaseModel):
+    word: str
+    start: float
+    end: float
+
+class SubtitleSegment(BaseModel):
+    id: int
+    start: float
+    end: float
+    text: str
+    words: Optional[List[WordItem]] = None
+
+class ExportRequest(BaseModel):
+    segments: List[SubtitleSegment]
+
+@app.get("/")
+def health_check():
+    return {
+        "status": "online",
+        "service": settings.APP_NAME,
+        "version": settings.VERSION,
+        "supported_language": "Sinhala (si-LK)",
+        "gcp_configured": bool(settings.GOOGLE_APPLICATION_CREDENTIALS),
+        "gemini_configured": bool(settings.GEMINI_API_KEY)
+    }
+
+@app.post("/api/transcribe")
+async def transcribe_media(
+    file: UploadFile = File(...),
+    engine: str = Form(default="google"),
+    words_per_chunk: int = Form(default=5)
+):
+    """
+    Accepts video or audio file, extracts audio, transcribes to Sinhala with high accuracy,
+    and returns timed segments along with ready-to-use SRT and VTT captions.
+    """
+    temp_in = None
+    temp_wav = None
+
+    try:
+        suffix = os.path.splitext(file.filename or "")[1] or ".mp4"
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
+            temp_in = f.name
+            content = await file.read()
+            f.write(content)
+
+        logger.info(f"Processing media file: {file.filename} ({len(content)} bytes)")
+
+        # 1. Extract & normalize to 16kHz mono WAV
+        temp_wav = AudioProcessor.extract_and_normalize(temp_in)
+
+        # 2. Sinhala Speech Recognition
+        stt_result = stt_service.transcribe(temp_wav, engine=engine)
+
+        # 3. Format into subtitle segments
+        if "words" in stt_result:
+            segments = CaptionFormatter.chunk_words_to_segments(
+                stt_result["words"],
+                words_per_chunk=words_per_chunk
+            )
+        elif "segments" in stt_result:
+            segments = stt_result["segments"]
+        else:
+            segments = []
+
+        # 4. Generate SRT and VTT representations
+        srt_content = CaptionFormatter.to_srt(segments)
+        vtt_content = CaptionFormatter.to_vtt(segments)
+
+        return {
+            "success": True,
+            "engine_used": stt_result.get("engine", engine),
+            "segment_count": len(segments),
+            "segments": segments,
+            "srt": srt_content,
+            "vtt": vtt_content
+        }
+
+    except Exception as e:
+        logger.error(f"Transcription error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        AudioProcessor.cleanup_file(temp_in)
+        AudioProcessor.cleanup_file(temp_wav)
+
+@app.post("/api/export-srt")
+def export_srt(payload: ExportRequest):
+    """Generates downloadable UTF-8 .srt file from segments."""
+    srt_text = CaptionFormatter.to_srt([seg.dict() for seg in payload.segments])
+    return Response(
+        content=srt_text.encode("utf-8"),
+        media_type="application/x-subrip",
+        headers={"Content-Disposition": 'attachment; filename="sinhala_captions.srt"'}
+    )
+
+@app.post("/api/export-vtt")
+def export_vtt(payload: ExportRequest):
+    """Generates downloadable UTF-8 .vtt file from segments."""
+    vtt_text = CaptionFormatter.to_vtt([seg.dict() for seg in payload.segments])
+    return Response(
+        content=vtt_text.encode("utf-8"),
+        media_type="text/vtt",
+        headers={"Content-Disposition": 'attachment; filename="sinhala_captions.vtt"'}
+    )
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host=settings.HOST, port=settings.PORT, reload=True)
