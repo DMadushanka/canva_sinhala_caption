@@ -68,11 +68,14 @@ class SinhalaSpeechService:
         try:
             import base64
             import requests
+            import mimetypes
 
             with open(audio_wav_path, "rb") as f:
                 audio_bytes = f.read()
 
             b64_audio = base64.b64encode(audio_bytes).decode("utf-8")
+            guessed_mime, _ = mimetypes.guess_type(audio_wav_path)
+            mime_type = guessed_mime or "audio/wav"
 
             prompt = (
                 "You are an expert Sinhala audio transcriptionist. Listen to this audio carefully and produce "
@@ -94,7 +97,7 @@ class SinhalaSpeechService:
                             {"text": prompt},
                             {
                                 "inline_data": {
-                                    "mime_type": "audio/wav",
+                                    "mime_type": mime_type,
                                     "data": b64_audio
                                 }
                             }

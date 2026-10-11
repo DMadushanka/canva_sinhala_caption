@@ -18,12 +18,19 @@ class AudioProcessor:
             output_path = tmp.name
             tmp.close()
 
-        # Try FFmpeg command line first
+        # Locate FFmpeg binary (bundled via imageio-ffmpeg or system PATH)
+        ffmpeg_bin = "ffmpeg"
+        try:
+            import imageio_ffmpeg
+            ffmpeg_bin = imageio_ffmpeg.get_ffmpeg_exe()
+        except ImportError:
+            pass
+
         cmd = [
-            "ffmpeg",
+            ffmpeg_bin,
             "-y",                   # Overwrite output
             "-i", input_path,       # Input file
-            "-vn",                  # Disable video
+            "-vn",                  # Disable video stream
             "-acodec", "pcm_s16le", # PCM 16-bit little-endian
             "-ar", "16000",         # Sample rate 16kHz
             "-ac", "1",             # Mono audio
@@ -33,17 +40,9 @@ class AudioProcessor:
         try:
             subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             return output_path
-        except (subprocess.SubprocessError, FileNotFoundError) as e:
-            logger.warning(f"FFmpeg failed or not found: {e}. Trying pydub fallback.")
-            try:
-                from pydub import AudioSegment
-                sound = AudioSegment.from_file(input_path)
-                sound = sound.set_frame_rate(16000).set_channels(1).set_sample_width(2)
-                sound.export(output_path, format="wav")
-                return output_path
-            except Exception as pydub_err:
-                logger.error(f"Failed to process audio with pydub: {pydub_err}")
-                raise RuntimeError(f"Audio processing failed. Ensure FFmpeg is installed: {pydub_err}")
+        except Exception as e:
+            logger.warning(f"FFmpeg extraction failed ({e}). Returning original media path as fallback.")
+            return input_path
 
     @staticmethod
     def cleanup_file(file_path: str):
