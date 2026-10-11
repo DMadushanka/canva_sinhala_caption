@@ -58,45 +58,92 @@ class SinhalaSpeechService:
 
     def transcribe_with_gemini(self, audio_wav_path: str) -> List[Dict[str, Any]]:
         """
-        Uses Gemini Audio to generate highly accurate Sinhala captions with natural punctuation,
-        numbers, and timestamps formatted directly in structured JSON.
+        Uses Gemini 1.5 Flash Audio API to generate highly accurate Sinhala captions
+        with natural punctuation, timestamps, and numbers.
+        Uses direct HTTP REST API to ensure 100% compatibility without grpc issues.
         """
         if not self.gemini_api_key:
-            raise ValueError("GEMINI_API_KEY is not configured.")
+            raise ValueError("GEMINI_API_KEY is not configured in .env file.")
 
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=self.gemini_api_key)
+            import base64
+            import requests
 
-            # Upload audio file
-            audio_file = genai.upload_file(path=audio_wav_path)
+            with open(audio_wav_path, "rb") as f:
+                audio_bytes = f.read()
+
+            b64_audio = base64.b64encode(audio_bytes).decode("utf-8")
 
             prompt = (
-                "You are an expert Sinhala audio transcriptionist. Listen to this audio and produce accurate "
-                "Sinhala subtitles. Return a strict JSON array of subtitle segments without markdown ticks or commentary.\n"
-                "Format requirement:\n"
+                "You are an expert Sinhala audio transcriptionist. Listen to this audio carefully and produce "
+                "completely accurate Sinhala subtitles (සිංහල උපසිරැසි).\n"
+                "Return ONLY a strict JSON array of subtitle segments without any markdown wrapping or explanatory text.\n"
+                "JSON format required:\n"
                 "[\n"
-                "  {\"start\": 0.0, \"end\": 2.4, \"text\": \"ආයුබෝවන් සියලු දෙනාටම\", \"words\": [{\"word\": \"ආයුබෝවන්\", \"start\": 0.0, \"end\": 1.1}, {\"word\": \"සියලු\", \"start\": 1.1, \"end\": 1.6}, {\"word\": \"දෙනාටම\", \"start\": 1.6, \"end\": 2.4}]}\n"
+                "  {\"start\": 0.0, \"end\": 2.5, \"text\": \"ආයුබෝවන් සියලු දෙනාටම\"},\n"
+                "  {\"start\": 2.6, \"end\": 5.1, \"text\": \"අද අපි කතා කරන්නේ...\"}\n"
                 "]\n"
-                "Ensure correct Sinhala spelling (අක්ෂර වින්‍යාසය) and natural punctuation."
+                "Ensure correct Sinhala spelling, accurate time offsets, and clear punctuation."
             )
 
-            model = genai.GenerativeModel("gemini-1.5-flash")
-            response = model.generate_content([audio_file, prompt])
-            
-            raw_text = response.text.strip()
-            # Clean possible markdown block
-            if raw_text.startswith("```json"):
-                raw_text = raw_text[7:]
-            if raw_text.startswith("```"):
-                raw_text = raw_text[3:]
-            if raw_text.endswith("```"):
-                raw_text = raw_text[:-3]
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": prompt},
+                            {
+                                "inline_data": {
+                                    "mime_type": "audio/wav",
+                                    "data": b64_audio
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": 0.2,
+                    "response_mime_type": "application/json"
+                }
+            }
 
-            parsed = json.loads(raw_text.strip())
-            return parsed
+            resp = requests.post(url, json=payload, timeout=120)
+            if not resp.ok:
+                err_text = resp.text
+                logger.error(f"Gemini API HTTP Error {resp.status_code}: {err_text}")
+                raise RuntimeError(f"Gemini API returned error: {resp.status_code} - {err_text}")
+
+            result = resp.json()
+            candidates = result.get("candidates", [])
+            if not candidates:
+                raise ValueError("No response generated from Gemini Audio.")
+
+            content_text = candidates[0]["content"]["parts"][0]["text"].strip()
+            
+            # Clean markdown formatting if present
+            if content_text.startswith("```json"):
+                content_text = content_text[7:]
+            if content_text.startswith("```"):
+                content_text = content_text[3:]
+            if content_text.endswith("```"):
+                content_text = content_text[:-3]
+
+            parsed = json.loads(content_text.strip())
+            
+            # Ensure items have IDs
+            formatted_segments = []
+            for idx, item in enumerate(parsed, start=1):
+                formatted_segments.append({
+                    "id": idx,
+                    "start": round(float(item.get("start", 0)), 2),
+                    "end": round(float(item.get("end", 0)), 2),
+                    "text": item.get("text", "").strip()
+                })
+
+            return formatted_segments
+
         except Exception as e:
-            logger.error(f"Gemini Audio STT failed: {e}")
+            logger.error(f"Gemini Audio STT failed: {e}", exc_info=True)
             raise
 
     def transcribe(self, audio_wav_path: str, engine: str = "google") -> Dict[str, Any]:
