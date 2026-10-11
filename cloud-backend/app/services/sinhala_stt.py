@@ -89,7 +89,16 @@ class SinhalaSpeechService:
                 "Ensure correct Sinhala spelling, accurate time offsets, and clear punctuation."
             )
 
-            candidate_models = ["gemini-3-flash-preview", "gemini-3.8-flash", "gemini-flash-latest"]
+            import time
+
+            candidate_models = [
+                "gemini-3.5-flash",
+                "gemini-flash-latest",
+                "gemini-3.5-flash-lite",
+                "gemini-flash-lite-latest",
+                "gemini-3-flash-preview",
+                "gemini-3.8-flash",
+            ]
             resp = None
             last_err = ""
 
@@ -115,19 +124,29 @@ class SinhalaSpeechService:
                     }
                 }
 
-                try:
-                    logger.info(f"Attempting Sinhala transcription with model {model_name}...")
-                    curr_resp = requests.post(url, json=payload, timeout=90)
-                    if curr_resp.ok:
-                        resp = curr_resp
-                        logger.info(f"Successfully transcribed with {model_name}")
+                for attempt in range(2):
+                    try:
+                        logger.info(f"Attempting Sinhala transcription with model {model_name} (attempt {attempt + 1})...")
+                        curr_resp = requests.post(url, json=payload, timeout=90)
+                        if curr_resp.ok:
+                            resp = curr_resp
+                            logger.info(f"Successfully transcribed with {model_name}")
+                            break
+                        elif curr_resp.status_code == 503:
+                            last_err = f"503 (High Demand) on {model_name}"
+                            logger.warning(f"Model {model_name} returned 503 high demand. Waiting 2s before retry...")
+                            time.sleep(2)
+                        else:
+                            last_err = f"{curr_resp.status_code} - {curr_resp.text}"
+                            logger.warning(f"Model {model_name} returned {curr_resp.status_code}. Trying next model...")
+                            break
+                    except Exception as req_err:
+                        last_err = str(req_err)
+                        logger.warning(f"Model {model_name} request failed ({req_err}). Trying next model...")
                         break
-                    else:
-                        last_err = f"{curr_resp.status_code} - {curr_resp.text}"
-                        logger.warning(f"Model {model_name} returned {curr_resp.status_code}. Trying next model...")
-                except Exception as req_err:
-                    last_err = str(req_err)
-                    logger.warning(f"Model {model_name} request failed ({req_err}). Trying next model...")
+
+                if resp is not None:
+                    break
 
             if resp is None:
                 raise RuntimeError(f"All Gemini models failed. Last error: {last_err}")
