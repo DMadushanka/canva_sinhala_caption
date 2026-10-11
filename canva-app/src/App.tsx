@@ -14,15 +14,16 @@ import {
   Video
 } from "lucide-react";
 import { SubtitleSegment, CaptionStyle } from "./types";
-import { transcribeMedia, downloadFile, getBackendUrl, setBackendUrl, checkBackendHealth } from "./services/api";
+import { transcribeMedia, downloadFile, getBackendUrl, setBackendUrl, checkBackendHealth, buildVttContent, buildSrtContent } from "./services/api";
 import { addCaptionToCanva, addAllCaptionsToCanva } from "./services/canvaSdk";
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"upload" | "editor" | "styling">("upload");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [engine, setEngine] = useState<"google" | "gemini">("google");
+  const [engine, setEngine] = useState<"google" | "gemini">("gemini");
   const [wordsPerChunk, setWordsPerChunk] = useState<number>(5);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [showCodeModal, setShowCodeModal] = useState<"vtt" | "srt" | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [customBackendUrl, setCustomBackendUrl] = useState<string>(getBackendUrl());
@@ -149,29 +150,22 @@ export const App: React.FC = () => {
 
   // Export SRT
   const handleExportSRT = () => {
-    if (srtData) {
-      downloadFile(srtData, "sinhala_captions.srt", "application/x-subrip");
-    } else if (segments.length > 0) {
-      // Build basic srt on the fly
-      let srtContent = "";
-      segments.forEach((s, idx) => {
-        srtContent += `${idx + 1}\n00:00:0${Math.floor(s.start)},000 --> 00:00:0${Math.floor(s.end)},000\n${s.text}\n\n`;
-      });
-      downloadFile(srtContent, "sinhala_captions.srt", "application/x-subrip");
-    }
+    if (segments.length === 0) return;
+    const content = srtData || buildSrtContent(segments);
+    downloadFile(content, "sinhala_captions.srt", "text/plain");
+    navigator.clipboard.writeText(content).catch(() => {});
+    setSuccessMsg("sinhala_captions.srt බාගත කරන ලදී (Clipboard එකටද Copy විය)!");
+    setTimeout(() => setSuccessMsg(null), 4000);
   };
 
   // Export VTT
   const handleExportVTT = () => {
-    if (vttData) {
-      downloadFile(vttData, "sinhala_captions.vtt", "text/vtt");
-    } else if (segments.length > 0) {
-      let vttContent = "WEBVTT\n\n";
-      segments.forEach((s, idx) => {
-        vttContent += `${idx + 1}\n00:00:0${Math.floor(s.start)}.000 --> 00:00:0${Math.floor(s.end)}.000\n${s.text}\n\n`;
-      });
-      downloadFile(vttContent, "sinhala_captions.vtt", "text/vtt");
-    }
+    if (segments.length === 0) return;
+    const content = vttData || buildVttContent(segments);
+    downloadFile(content, "sinhala_captions.vtt", "text/vtt");
+    navigator.clipboard.writeText(content).catch(() => {});
+    setSuccessMsg("sinhala_captions.vtt බාගත කරන ලදී (Clipboard එකටද Copy විය)!");
+    setTimeout(() => setSuccessMsg(null), 4000);
   };
 
   return (
@@ -425,13 +419,73 @@ export const App: React.FC = () => {
                 >
                   <Copy size={13} /> Copy All Text
                 </button>
-                <button className="btn-secondary" onClick={handleExportSRT}>
-                  <Download size={13} /> Export .SRT
-                </button>
-                <button className="btn-secondary" onClick={handleExportVTT}>
+                <button
+                  className="btn-secondary"
+                  onClick={() => {
+                    handleExportVTT();
+                    setShowCodeModal(showCodeModal === "vtt" ? null : "vtt");
+                  }}
+                  title="Download or view .VTT subtitle file"
+                >
                   <Download size={13} /> Export .VTT
                 </button>
+                <button
+                  className="btn-secondary"
+                  onClick={() => {
+                    handleExportSRT();
+                    setShowCodeModal(showCodeModal === "srt" ? null : "srt");
+                  }}
+                  title="Download or view .SRT subtitle file"
+                >
+                  <Download size={13} /> Export .SRT
+                </button>
               </div>
+
+              {/* In-App Subtitle Viewer (Guaranteed to work if browser blocks iframe download) */}
+              {showCodeModal && (
+                <div
+                  style={{
+                    background: "#12141c",
+                    border: "1px solid rgba(0, 196, 204, 0.4)",
+                    borderRadius: 8,
+                    padding: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#00c4cc" }}>
+                      {showCodeModal.toUpperCase()} Subtitle File Content:
+                    </span>
+                    <button
+                      className="btn-secondary"
+                      style={{ padding: "3px 8px", fontSize: 10 }}
+                      onClick={() => {
+                        const code = showCodeModal === "vtt" ? buildVttContent(segments) : buildSrtContent(segments);
+                        navigator.clipboard.writeText(code);
+                        setSuccessMsg(`${showCodeModal.toUpperCase()} Code Copied!`);
+                        setTimeout(() => setSuccessMsg(null), 3000);
+                      }}
+                    >
+                      <Copy size={11} /> Copy {showCodeModal.toUpperCase()}
+                    </button>
+                  </div>
+                  <textarea
+                    readOnly
+                    rows={6}
+                    style={{
+                      width: "100%",
+                      background: "#0a0b10",
+                      color: "#e5e7eb",
+                      border: "1px solid rgba(255, 255, 255, 0.1)",
+                      borderRadius: 6,
+                      padding: 8,
+                      fontSize: 11,
+                      fontFamily: "monospace",
+                      resize: "vertical",
+                    }}
+                    value={showCodeModal === "vtt" ? buildVttContent(segments) : buildSrtContent(segments)}
+                  />
+                </div>
+              )}
 
               {/* Native Canva Video Caption Guide Box */}
               <div
@@ -450,10 +504,10 @@ export const App: React.FC = () => {
                   <span>Canva Video Timeline Subtitle Track (වීඩියෝවට සෘජුව උපසිරැසි දමන්න)</span>
                 </div>
                 <div>
-                  1. Click <strong>Export .VTT</strong> to download the subtitle file.<br />
+                  1. Click <strong>Export .VTT</strong> (it downloads the file & copies the text).<br />
                   2. Select your video on the Canva canvas.<br />
                   3. In the top toolbar, click <strong>Captions</strong> (උපසිරැසි).<br />
-                  4. Click <strong>Upload subtitle file</strong> and choose the downloaded <strong>.vtt</strong> file.<br />
+                  4. Click <strong>Upload subtitle file</strong> and choose the <strong>sinhala_captions.vtt</strong> file.<br />
                   <span style={{ color: "#00c4cc", fontWeight: 600 }}>
                     ⚡ Canva will automatically display and synchronize Sinhala subtitles across your entire video!
                   </span>
