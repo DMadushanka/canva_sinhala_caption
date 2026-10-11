@@ -89,32 +89,48 @@ class SinhalaSpeechService:
                 "Ensure correct Sinhala spelling, accurate time offsets, and clear punctuation."
             )
 
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_api_key}"
-            payload = {
-                "contents": [
-                    {
-                        "parts": [
-                            {"text": prompt},
-                            {
-                                "inline_data": {
-                                    "mime_type": mime_type,
-                                    "data": b64_audio
-                                }
-                            }
-                        ]
-                    }
-                ],
-                "generationConfig": {
-                    "temperature": 0.2,
-                    "response_mime_type": "application/json"
-                }
-            }
+            candidate_models = ["gemini-3-flash-preview", "gemini-3.8-flash", "gemini-flash-latest"]
+            resp = None
+            last_err = ""
 
-            resp = requests.post(url, json=payload, timeout=120)
-            if not resp.ok:
-                err_text = resp.text
-                logger.error(f"Gemini API HTTP Error {resp.status_code}: {err_text}")
-                raise RuntimeError(f"Gemini API returned error: {resp.status_code} - {err_text}")
+            for model_name in candidate_models:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={self.gemini_api_key}"
+                payload = {
+                    "contents": [
+                        {
+                            "parts": [
+                                {"text": prompt},
+                                {
+                                    "inline_data": {
+                                        "mime_type": mime_type,
+                                        "data": b64_audio
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    "generationConfig": {
+                        "temperature": 0.2,
+                        "response_mime_type": "application/json"
+                    }
+                }
+
+                try:
+                    logger.info(f"Attempting Sinhala transcription with model {model_name}...")
+                    curr_resp = requests.post(url, json=payload, timeout=90)
+                    if curr_resp.ok:
+                        resp = curr_resp
+                        logger.info(f"Successfully transcribed with {model_name}")
+                        break
+                    else:
+                        last_err = f"{curr_resp.status_code} - {curr_resp.text}"
+                        logger.warning(f"Model {model_name} returned {curr_resp.status_code}. Trying next model...")
+                except Exception as req_err:
+                    last_err = str(req_err)
+                    logger.warning(f"Model {model_name} request failed ({req_err}). Trying next model...")
+
+            if resp is None:
+                raise RuntimeError(f"All Gemini models failed. Last error: {last_err}")
 
             result = resp.json()
             candidates = result.get("candidates", [])

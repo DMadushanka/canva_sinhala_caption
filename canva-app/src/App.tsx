@@ -251,8 +251,8 @@ export const App: React.FC = () => {
                 value={engine}
                 onChange={(e) => setEngine(e.target.value as any)}
               >
-                <option value="google">Google Cloud STT (si-LK) - Highest Phonetic Accuracy</option>
-                <option value="gemini">Gemini 1.5 Flash Audio - Best Context & Punctuation</option>
+                <option value="gemini">Gemini 3 Flash Audio - Highest Accuracy & Punctuation</option>
+                <option value="google">Google Cloud STT (si-LK) - Traditional Phonetics</option>
               </select>
             </div>
 
