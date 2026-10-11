@@ -6,26 +6,48 @@ import { SubtitleSegment, CaptionStyle } from "../types";
  */
 export async function addCaptionToCanva(segment: SubtitleSegment, style: CaptionStyle): Promise<boolean> {
   try {
-    const { addNativeElement } = await import("@canva/design");
-    await addNativeElement({
-      type: "text" as const,
+    const { addElementAtPoint, getDefaultPageDimensions } = await import("@canva/design");
+    
+    let top = 800;
+    let left = 100;
+    let width = 800;
+    
+    try {
+      const dimensions = await getDefaultPageDimensions();
+      if (dimensions && dimensions.width && dimensions.height) {
+        width = Math.min(Math.round(dimensions.width * 0.8), 1200);
+        left = Math.round((dimensions.width - width) / 2);
+        top = Math.round(dimensions.height * 0.82); // Position near the bottom for video subtitle
+      }
+    } catch (dimErr) {
+      console.warn("Could not retrieve default page dimensions:", dimErr);
+    }
+
+    await addElementAtPoint({
+      type: "text",
       children: [segment.text],
+      top,
+      left,
+      width,
+      textAlign: "center",
+      fontWeight: "bold",
+      fontSize: style.fontSize || 32,
+      color: style.textColor || "#ffffff",
     } as any);
+
     return true;
   } catch (err) {
     try {
-      // @ts-ignore
-      if (window.Canva && window.Canva.design) {
-        // @ts-ignore
-        await window.Canva.design.addNativeElement({
-          type: "text",
-          children: [segment.text],
-        });
-        return true;
-      }
-    } catch (fallbackErr) {
-      console.warn("Canva SDK fallback notice:", fallbackErr);
+      const { addElementAtCursor } = await import("@canva/design");
+      await addElementAtCursor({
+        type: "text",
+        children: [segment.text],
+      } as any);
+      return true;
+    } catch (cursorErr) {
+      console.warn("addElementAtCursor fallback notice:", cursorErr);
     }
+
     console.warn("Canva SDK notice:", err);
     return false;
   }
