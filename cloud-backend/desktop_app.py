@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import time
+import socket
 import shutil
 import threading
 import webbrowser
@@ -33,6 +34,19 @@ def save_key(key: str):
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump({"gemini_api_key": key.strip()}, f)
     os.environ["GEMINI_API_KEY"] = key.strip()
+
+def find_free_port(preferred_port: int = 8000) -> int:
+    """Finds an available local port starting from preferred_port."""
+    for port in [preferred_port, 8001, 8002, 8080, 8888, 9000]:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('127.0.0.1', port))
+                return port
+        except OSError:
+            continue
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('127.0.0.1', 0))
+        return s.getsockname()[1]
 
 def get_cloudflared_path() -> str:
     """Finds bundled or cached cloudflared executable."""
@@ -73,13 +87,18 @@ class ServerThread(threading.Thread):
         self.host = host
         self.port = port
         self.server = None
+        self.error = None
 
     def run(self):
-        import uvicorn
-        from app.main import app
-        config = uvicorn.Config(app=app, host=self.host, port=self.port, log_level="warning")
-        self.server = uvicorn.Server(config)
-        self.server.run()
+        try:
+            import uvicorn
+            from app.main import app
+            config = uvicorn.Config(app=app, host=self.host, port=self.port, log_level="warning")
+            self.server = uvicorn.Server(config)
+            self.server.run()
+        except Exception as e:
+            self.error = str(e)
+            logger.error(f"Uvicorn server crashed: {e}", exc_info=True)
 
     def stop(self):
         if self.server:
@@ -89,13 +108,14 @@ class DesktopApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("Sinhala Captions Engine for Canva")
-        self.root.geometry("540x560")
+        self.root.geometry("540x570")
         self.root.resizable(False, False)
         self.root.configure(bg="#0e131f")
 
         self.server_thread = None
         self.tunnel_process = None
         self.tunnel_url = ""
+        self.port = 8000
         self.saved_key = load_saved_key()
 
         # Handle window closing cleanly
@@ -351,23 +371,54 @@ class DesktopApp:
         except Exception:
             pass
 
+        self.port = find_free_port(8000)
+
         # Update status UI
         self.status_indicator.configure(fg="#38bdf8")
-        self.status_label.configure(text="Starting Engine & Secure HTTPS Bridge...")
+        self.status_label.configure(text=f"Starting Local Engine (Port {self.port})...")
+        self.url_entry.configure(state="normal")
+        self.url_entry.delete(0, tk.END)
+        self.url_entry.insert(0, "Connecting to Cloudflare HTTPS tunnel...")
+        self.url_entry.configure(state="readonly")
+        self.btn_copy_url.configure(state="disabled")
         self.btn_save_start.configure(text="Engine Active (Click to Update Key)", bg="#059669")
 
-        # 1. Start local Uvicorn FastAPI server on 127.0.0.1:8000
-        if not self.server_thread or not self.server_thread.is_alive():
-            self.server_thread = ServerThread(host="127.0.0.1", port=8000)
-            self.server_thread.start()
+        # Stop any existing server thread cleanly
+        if self.server_thread and self.server_thread.is_alive():
+            try:
+                self.server_thread.stop()
+            except Exception:
+                pass
+            time.sleep(0.5)
+
+        # 1. Start local Uvicorn FastAPI server on free port
+        self.server_thread = ServerThread(host="127.0.0.1", port=self.port)
+        self.server_thread.start()
 
         # 2. Start Cloudflare HTTPS tunnel thread
         threading.Thread(target=self.start_tunnel_worker, daemon=True).start()
 
     def start_tunnel_worker(self):
-        # Wait 1.5 seconds for Uvicorn to bind port 8000
-        time.sleep(1.5)
+        # Step 1: Wait and actively verify local server is alive
+        import urllib.request
+        server_ready = False
+        for _ in range(30):
+            time.sleep(0.2)
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/", timeout=1) as resp:
+                    if resp.status == 200:
+                        server_ready = True
+                        break
+            except Exception:
+                pass
 
+        if not server_ready:
+            err = self.server_thread.error if self.server_thread and self.server_thread.error else f"Could not bind to port {self.port}"
+            logger.error(f"Server start failed: {err}")
+            self.root.after(0, self.on_server_error, err)
+            return
+
+        # Step 2: Locate cloudflared binary
         cf_exe = get_cloudflared_path()
         if not cf_exe or not os.path.exists(cf_exe):
             try:
@@ -379,7 +430,7 @@ class DesktopApp:
                 logger.error(f"Failed to obtain cloudflared: {e}")
 
         if not cf_exe or not os.path.exists(cf_exe):
-            self.root.after(0, self.on_tunnel_fallback, "http://localhost:8000")
+            self.root.after(0, self.on_tunnel_fallback, f"http://localhost:{self.port}")
             return
 
         # Terminate any previously running tunnel
@@ -390,7 +441,7 @@ class DesktopApp:
                 pass
 
         try:
-            args = [cf_exe, "tunnel", "--url", "http://127.0.0.1:8000"]
+            args = [cf_exe, "tunnel", "--url", f"http://127.0.0.1:{self.port}"]
             startupinfo = None
             if os.name == "nt":
                 startupinfo = subprocess.STARTUPINFO()
@@ -419,14 +470,29 @@ class DesktopApp:
                     break
 
             if found_url:
+                # Step 3: Actively test tunnel from edge
+                self.root.after(0, lambda: self.status_label.configure(text="Verifying Cloudflare HTTPS Bridge..."))
+                for _ in range(25):
+                    time.sleep(0.4)
+                    try:
+                        req = urllib.request.Request(
+                            f"{found_url}/",
+                            headers={"User-Agent": "SinhalaCaptionsEngine/1.0"}
+                        )
+                        with urllib.request.urlopen(req, timeout=3) as resp:
+                            if resp.status == 200:
+                                break
+                    except Exception:
+                        pass
+
                 self.tunnel_url = found_url
                 self.root.after(0, self.on_tunnel_success, found_url)
             else:
-                self.root.after(0, self.on_tunnel_fallback, "http://localhost:8000")
+                self.root.after(0, self.on_tunnel_fallback, f"http://localhost:{self.port}")
 
         except Exception as e:
             logger.error(f"Error launching tunnel: {e}")
-            self.root.after(0, self.on_tunnel_fallback, "http://localhost:8000")
+            self.root.after(0, self.on_tunnel_fallback, f"http://localhost:{self.port}")
 
     def on_tunnel_success(self, url: str):
         self.tunnel_url = url
@@ -448,7 +514,15 @@ class DesktopApp:
 
         self.btn_copy_url.configure(state="normal")
         self.status_indicator.configure(fg="#f59e0b")
-        self.status_label.configure(text="Engine Online (Localhost Mode)")
+        self.status_label.configure(text=f"Engine Online (Local Port {self.port})")
+
+    def on_server_error(self, err_text: str):
+        self.status_indicator.configure(fg="#ef4444")
+        self.status_label.configure(text=f"Engine Error: {err_text[:35]}")
+        self.url_entry.configure(state="normal")
+        self.url_entry.delete(0, tk.END)
+        self.url_entry.insert(0, f"Error: {err_text}")
+        self.url_entry.configure(state="readonly")
 
     def on_close(self):
         if self.tunnel_process:
